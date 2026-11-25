@@ -7,6 +7,7 @@
 #   "numpy<2",
 #   "scipy",
 #   "requests",
+#   "secretstorage; sys_platform == 'linux'",
 # ]
 # ///
 """Genera una hoja de acordes (acordes encima de la letra) a partir de un link
@@ -76,6 +77,32 @@ def is_url(s: str) -> bool:
     return bool(re.match(r"^https?://", s)) or s.startswith("www.")
 
 
+COOKIE_SPEC = re.compile(
+    r"(?P<name>[^+:]+)(?:\+(?P<keyring>[^:]+))?(?::(?!:)(?P<profile>.+?))?(?:::(?P<container>.+))?")
+
+
+def parse_cookie_spec(spec: str):
+    """Misma sintaxis que yt-dlp: NAVEGADOR[+LLAVERO][:PERFIL][::CONTENEDOR].
+    Ej.: 'firefox', 'chrome:Profile 1', 'chrome+gnomekeyring:Profile 1'."""
+    m = COOKIE_SPEC.fullmatch(spec.strip())
+    if not m:
+        sys.exit(f"--cookies-navegador inválido: {spec!r} (formato: NAVEGADOR[+LLAVERO][:PERFIL])")
+    keyring = m.group("keyring").upper() if m.group("keyring") else None
+    return (m.group("name").lower(), m.group("profile"), keyring, m.group("container"))
+
+
+def ensure_dbus_session():
+    """En Linux, Chrome/Chromium cifran las cookies con el llavero del escritorio, al
+    que se accede por D-Bus. Si el agente corre fuera de la sesión gráfica, apuntar
+    al bus del usuario."""
+    import os
+
+    if sys.platform.startswith("linux") and not os.environ.get("DBUS_SESSION_BUS_ADDRESS"):
+        bus = Path(f"/run/user/{os.getuid()}/bus")
+        if bus.exists():
+            os.environ["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus}"
+
+
 def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None) -> dict:
     import yt_dlp
 
@@ -89,7 +116,8 @@ def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
     }
     if cookies_browser:
-        opts["cookiesfrombrowser"] = (cookies_browser,)
+        ensure_dbus_session()
+        opts["cookiesfrombrowser"] = parse_cookie_spec(cookies_browser)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
@@ -97,8 +125,8 @@ def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None
         msg = str(e)
         hint = ""
         if "not a bot" in msg or "Sign in" in msg:
-            hint = ("YouTube pide verificación anti-bot. Reintentar con --cookies-navegador firefox "
-                    "(o chrome/brave/edge), o descargar el audio a mano y pasar el archivo.")
+            hint = ("YouTube pide verificación anti-bot. Reintentar con --cookies-navegador "
+                    "(p. ej. firefox, o 'chrome+gnomekeyring:Profile 1'), o pasar el audio como archivo.")
         sys.exit(f"ERROR al descargar: {msg}\n{hint}".rstrip())
     src = workdir / "descarga.wav"
     return {
@@ -640,8 +668,9 @@ def main():
     ap.add_argument("--modelo-whisper", default="small",
                     help="tiny/base/small/medium/large-v3. Más grande = mejor pero más lento (default: small)")
     ap.add_argument("--sin-whisper", action="store_true", help="no usar Whisper (solo tiempos de LRCLIB)")
-    ap.add_argument("--cookies-navegador", metavar="NAVEGADOR",
-                    help="usar las cookies de YouTube de este navegador (firefox, chrome, brave, edge...) "
+    ap.add_argument("--cookies-navegador", metavar="NAVEGADOR[+LLAVERO][:PERFIL]",
+                    help="usar las cookies de YouTube de este navegador, con la sintaxis de yt-dlp "
+                         "(firefox, chrome, 'chrome:Profile 1', 'chrome+gnomekeyring:Profile 1'...) "
                          "si YouTube pide verificación anti-bot")
     ap.add_argument("--sin-lrclib", action="store_true", help="no buscar la letra en LRCLIB")
     args = ap.parse_args()

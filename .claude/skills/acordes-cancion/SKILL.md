@@ -38,7 +38,7 @@ Opciones útiles:
 | `--idioma es` | Whisper detecta mal el idioma (se deduce solo si hay letra). |
 | `--modelo-whisper medium` | No hay letra en LRCLIB y la transcripción salió mala. Más lento. |
 | `--sin-lrclib` | La letra de LRCLIB es de otra versión (en vivo, remaster) y queda desfasada. |
-| `--cookies-navegador firefox` | YouTube responde "Sign in to confirm you're not a bot". Lee las cookies de sesión del navegador del usuario: **pedile permiso antes** y preguntale qué navegador usa. |
+| `--cookies-navegador NAVEGADOR[+LLAVERO][:PERFIL]` | YouTube responde "Sign in to confirm you're not a bot". Usa las cookies de sesión del navegador del usuario: **pedile permiso antes**, y preguntale qué navegador y perfil usa. Ejemplos: `firefox`, `chrome`, `"chrome:Profile 1"`, `"chrome+gnomekeyring:Profile 1"`. |
 
 Tarda 1–3 min por canción en CPU. Imprime un JSON final con la carpeta creada,
 que contiene:
@@ -146,6 +146,12 @@ corregiste o dudas que quedan (p. ej. "en el puente no tengo claro si es G o Em"
   bloqueó la descarga y ofrécele dos salidas: que te deje usar las cookies de su
   navegador (`--cookies-navegador firefox`/`chrome`/…; solo con su permiso,
   porque accede a su sesión) o que te mande el audio.
+  En Linux, Chrome/Chromium/Brave cifran las cookies con el llavero del escritorio:
+  si con `chrome` solo no alcanza, indica el llavero y el perfil
+  (`"chrome+gnomekeyring:Profile 1"`; en KDE, `+kwallet`). Los perfiles están en
+  `~/.config/google-chrome/` (carpetas `Default`, `Profile 1`…); el que tiene
+  YouTube abierto suele ser el que más se usa. El script ya conecta con el
+  llavero de la sesión aunque el agente corra fuera del escritorio.
 - **Whisper avisa que falta `libcublas`/CUDA**: es normal sin GPU NVIDIA con CUDA;
   sigue en CPU, solo tarda algo más.
 - **YouTube cambió algo y yt-dlp falla**: `uv run --upgrade-package yt-dlp $SKILL/scripts/acordes.py …`.
