@@ -20,6 +20,11 @@ echo "Requisitos del sistema:"
 check uv     "curl -LsSf https://astral.sh/uv/install.sh | sh"
 check ffmpeg "sudo apt install ffmpeg   (macOS: brew install ffmpeg)"
 check git    "sudo apt install git"
+if command -v deno >/dev/null 2>&1 || command -v node >/dev/null 2>&1 || command -v bun >/dev/null 2>&1; then
+  echo "  ✔ intérprete de JavaScript (para YouTube)"
+else
+  echo "  ✘ falta un intérprete de JavaScript (YouTube lo exige) — sudo apt install nodejs"; ok=0
+fi
 if command -v cc >/dev/null 2>&1 || command -v gcc >/dev/null 2>&1 || command -v clang >/dev/null 2>&1; then
   echo "  ✔ compilador C"
 else
@@ -35,4 +40,11 @@ echo "Descargando modelo Whisper '$MODEL'…"
 uv run --with faster-whisper --python 3.12 python -c \
   "from faster_whisper import WhisperModel; WhisperModel('$MODEL', device='cpu', compute_type='int8')" \
   || echo "  (no se pudo precargar el modelo; se descargará en el primer uso)"
+CFG="$HOME/.config/acordes-cancion/navegador"
+if [ -s "$CFG" ]; then
+  echo "Navegador para cookies de YouTube: $(cat "$CFG")"
+else
+  echo "Falta elegir el navegador para las cookies de YouTube (se pide en el primer uso,"
+  echo "o guardalo ahora:  mkdir -p ~/.config/acordes-cancion && echo 'chrome+gnomekeyring:Profile 1' > $CFG)"
+fi
 echo "Listo."

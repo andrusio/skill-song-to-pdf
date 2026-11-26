@@ -104,6 +104,60 @@ def ensure_dbus_session():
             os.environ["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={bus}"
 
 
+COOKIES_CONFIG = Path.home() / ".config" / "acordes-cancion" / "navegador"
+
+
+def detect_browser_profiles():
+    """Perfiles de navegador presentes, en la sintaxis de --cookies-navegador."""
+    home = Path.home()
+    found = []
+    chromium_like = [("chrome", home / ".config/google-chrome"), ("chromium", home / ".config/chromium"),
+                     ("chromium", home / "snap/chromium/common/chromium"),
+                     ("brave", home / ".config/BraveSoftware/Brave-Browser"),
+                     ("edge", home / ".config/microsoft-edge"), ("vivaldi", home / ".config/vivaldi"),
+                     ("chrome", home / "Library/Application Support/Google/Chrome")]
+    for name, d in chromium_like:
+        if d.is_dir():
+            for prof in sorted(d.iterdir()):
+                if prof.is_dir() and (prof.name == "Default" or prof.name.startswith("Profile ")):
+                    found.append(name if prof.name == "Default" else f"{name}:{prof.name}")
+    for d in (home / ".mozilla/firefox", home / "snap/firefox/common/.mozilla/firefox",
+              home / "Library/Application Support/Firefox/Profiles"):
+        if d.is_dir() and any(p.suffix.startswith(".default") or ".default" in p.name for p in d.iterdir()):
+            found.append("firefox")
+            break
+    return list(dict.fromkeys(found))
+
+
+def resolve_cookies(arg: str | None, disabled: bool) -> str | None:
+    """YouTube bloquea las descargas anónimas, así que siempre se usan cookies:
+    las de --cookies-navegador (y se guardan como predeterminadas) o las guardadas."""
+    if disabled:
+        return None
+    if arg:
+        return arg
+    if COOKIES_CONFIG.exists():
+        saved = COOKIES_CONFIG.read_text(encoding="utf-8").strip()
+        if saved:
+            return saved
+    cands = detect_browser_profiles()
+    sys.exit(
+        "FALTA_NAVEGADOR: YouTube bloquea las descargas sin sesión, así que hay que usar las cookies "
+        "de un navegador donde el usuario tenga YouTube abierto.\n"
+        "Preguntale al usuario cuál usar y volvé a correr con --cookies-navegador <opción> "
+        "(queda guardado para las próximas veces).\n"
+        "Perfiles encontrados en esta máquina: " + (", ".join(cands) if cands else "ninguno") +
+        "\nEn Linux, para Chrome/Brave/Chromium suele hacer falta el llavero: "
+        "p. ej. 'chrome+gnomekeyring:Profile 1' (KDE: +kwallet).")
+
+
+def save_cookies_default(spec: str):
+    COOKIES_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    if not COOKIES_CONFIG.exists() or COOKIES_CONFIG.read_text(encoding="utf-8").strip() != spec:
+        COOKIES_CONFIG.write_text(spec + "\n", encoding="utf-8")
+        log(f"Navegador para cookies guardado como predeterminado: {spec} ({COOKIES_CONFIG})")
+
+
 def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None) -> dict:
     import yt_dlp
 
@@ -132,8 +186,10 @@ def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None
         msg = str(e)
         hint = ""
         if "not a bot" in msg or "Sign in" in msg:
-            hint = ("YouTube pide verificación anti-bot. Reintentar con --cookies-navegador "
-                    "(p. ej. firefox, o 'chrome+gnomekeyring:Profile 1'), o pasar el audio como archivo.")
+            hint = (f"YouTube pide verificación anti-bot aun con las cookies de '{cookies_browser}'. "
+                    "Probablemente ese perfil no tiene sesión de YouTube o falta el llavero: probar otro "
+                    "perfil con --cookies-navegador (p. ej. 'chrome+gnomekeyring:Profile 1'), o pasar el audio "
+                    "como archivo. Perfiles encontrados: " + ", ".join(detect_browser_profiles()))
         sys.exit(f"ERROR al descargar: {msg}\n{hint}".rstrip())
     src = workdir / "descarga.wav"
     return {
@@ -711,8 +767,10 @@ def main():
     ap.add_argument("--sin-whisper", action="store_true", help="no usar Whisper (solo tiempos de LRCLIB)")
     ap.add_argument("--cookies-navegador", metavar="NAVEGADOR[+LLAVERO][:PERFIL]",
                     help="usar las cookies de YouTube de este navegador, con la sintaxis de yt-dlp "
-                         "(firefox, chrome, 'chrome:Profile 1', 'chrome+gnomekeyring:Profile 1'...) "
-                         "si YouTube pide verificación anti-bot")
+                         "(firefox, chrome, 'chrome:Profile 1', 'chrome+gnomekeyring:Profile 1'...). "
+                         "Se guarda como predeterminado en ~/.config/acordes-cancion/navegador")
+    ap.add_argument("--sin-cookies", action="store_true",
+                    help="descargar sin cookies (YouTube suele bloquearlo)")
     ap.add_argument("--sin-extensiones", action="store_true",
                     help="no analizar séptimas/sus/6/add9 (solo mayor/menor)")
     ap.add_argument("--sin-lrclib", action="store_true", help="no buscar la letra en LRCLIB")
@@ -726,7 +784,10 @@ def main():
     # --- 1. audio ---
     if is_url(args.entrada):
         log("Descargando audio de YouTube…")
-        info = download_youtube(args.entrada, tmp, args.cookies_navegador)
+        cookies = resolve_cookies(args.cookies_navegador, args.sin_cookies)
+        info = download_youtube(args.entrada, tmp, cookies)
+        if cookies:
+            save_cookies_default(cookies)  # funcionó: usarlo por defecto la próxima vez
         artist_guess, title_guess = (info["artist"], info["track"]) if info["artist"] and info["track"] else \
             split_artist_title(info["raw_title"], info["uploader"])
         src_audio, source = info["audio"], info["source"]

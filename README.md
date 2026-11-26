@@ -19,10 +19,10 @@ El skill está en [`.claude/skills/acordes-cancion/`](.claude/skills/acordes-can
 
 ## Instalación en la notebook (Hermes)
 
-Requisitos: `uv`, `ffmpeg`, `git` y un compilador C.
+Requisitos: `uv`, `ffmpeg`, `git`, un compilador C y Node.js (YouTube exige resolver un desafío en JavaScript).
 
 ```bash
-sudo apt install ffmpeg git build-essential
+sudo apt install ffmpeg git build-essential nodejs
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
@@ -33,6 +33,11 @@ dependencias y baja el modelo de Whisper, ~1 GB la primera vez):
 cp -r .claude/skills/acordes-cancion ~/.hermes/skills/
 bash ~/.hermes/skills/acordes-cancion/scripts/setup.sh
 ```
+
+**Cookies de YouTube:** YouTube bloquea las descargas sin sesión, así que el skill
+siempre usa las cookies del navegador donde tengas YouTube abierto. La primera vez
+el agente te pregunta cuál (p. ej. `chrome+gnomekeyring:Profile 1` o `firefox`) y
+lo guarda en `~/.config/acordes-cancion/navegador`.
 
 Después, en Hermes: *"sacame los acordes de https://youtu.be/…"* o mandarle un audio.
 
