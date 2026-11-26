@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import chordlib  # noqa: E402
+import extensiones  # noqa: E402
 
 
 def log(msg: str):
@@ -115,6 +116,12 @@ def download_youtube(url: str, workdir: Path, cookies_browser: str | None = None
         "no_warnings": True,
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
     }
+    # YouTube exige resolver un desafío en JavaScript (sobre todo con sesión iniciada).
+    # yt-dlp solo busca deno por defecto; usar el primer intérprete que haya.
+    for rt in ("deno", "node", "bun", "qjs"):
+        if shutil.which(rt):
+            opts["js_runtimes"] = {"quickjs" if rt == "qjs" else rt: {}}
+            break
     if cookies_browser:
         ensure_dbus_session()
         opts["cookiesfrombrowser"] = parse_cookie_spec(cookies_browser)
@@ -655,6 +662,40 @@ def build_sheet(meta, lines, chords, audio_dur):
     return res
 
 
+def fmt_time(t: float) -> str:
+    return f"{int(t // 60)}:{int(t % 60):02d}"
+
+
+def where_in_lyrics(lines, t):
+    """'intro', 'final', 'instrumental' o el comienzo de la línea de letra que suena en t."""
+    if not lines:
+        return ""
+    if t < lines[0]["start"] - LEAD_IN:
+        return "intro"
+    for i, ln in enumerate(lines):
+        nxt = lines[i + 1]["start"] if i + 1 < len(lines) else None
+        if ln["start"] - LEAD_IN <= t and (nxt is None or t < nxt - LEAD_IN):
+            if t > (ln.get("end") or ln["start"]) + INSTR_GAP:
+                return "final" if nxt is None else "instrumental"
+            words = ln["text"].split()
+            return "«" + " ".join(words[:4]) + ("…" if len(words) > 4 else "") + "»"
+    return "?"
+
+
+def extension_comments(occ, summary):
+    """Comentarios // para cancion.txt (no se imprimen en el PDF).
+
+    Solo se listan las sugerencias que se repiten en la mayoría de las apariciones
+    de un acorde: en pruebas con grabaciones reales, las sueltas son casi siempre
+    la melodía o la voz cantando esa nota, no parte del acorde."""
+    if not summary:
+        return []
+    out = ["// Extensiones sugeridas por el audio (NO aplicadas; validar y aplicar a mano):"]
+    for ch, s in sorted(summary.items(), key=lambda kv: -kv[1]["veces"] / kv[1]["de"]):
+        out.append(f"//   {ch} -> {s['sugerencia']}  (en {s['veces']} de {s['de']} apariciones)")
+    return out
+
+
 # ---------------------------------------------------------------------------
 
 def main():
@@ -672,6 +713,8 @@ def main():
                     help="usar las cookies de YouTube de este navegador, con la sintaxis de yt-dlp "
                          "(firefox, chrome, 'chrome:Profile 1', 'chrome+gnomekeyring:Profile 1'...) "
                          "si YouTube pide verificación anti-bot")
+    ap.add_argument("--sin-extensiones", action="store_true",
+                    help="no analizar séptimas/sus/6/add9 (solo mayor/menor)")
     ap.add_argument("--sin-lrclib", action="store_true", help="no buscar la letra en LRCLIB")
     args = ap.parse_args()
 
@@ -758,6 +801,12 @@ def main():
     key = chordlib.estimate_key((c["chord"], c["end"] - c["start"]) for c in raw_chords if c["chord"] != "N")
     chords = clean_chords([dict(c) for c in raw_chords], beats, key)
     log(f"Tono estimado: {key}; tempo ≈ {bpm:.0f} BPM" if bpm else f"Tono estimado: {key}")
+    ext_occ, ext_sum = [], {}
+    if not args.sin_extensiones:
+        log("Buscando séptimas y otras extensiones…")
+        ext_occ, ext_sum = extensiones.suggest(chords, wav)
+        for o in ext_occ:  # ubicar cada sugerencia en la letra para que el revisor la encuentre
+            o["donde"] = where_in_lyrics(lines, o["inicio"])
 
     # --- 5. hoja ---
     sheet = build_sheet({}, lines, chords, dur)
@@ -772,8 +821,9 @@ def main():
         f"// Fuente: {source}",
         f"// Letra: {lyrics['source']} {('(' + lyrics['match'] + ')') if lyrics['match'] else ''}".rstrip(),
         "// Acordes: detección automática (madmom). Revisar antes de imprimir.",
-        "",
     ]
+    header += extension_comments(ext_occ, ext_sum)
+    header.append("")
     txt_path = folder / "cancion.txt"
     txt_path.write_text("\n".join(header + sheet) + "\n", encoding="utf-8")
 
@@ -781,6 +831,8 @@ def main():
         "titulo": title, "artista": artist, "fuente": source, "duracion": dur,
         "tono": key, "bpm": bpm, "letra_fuente": lyrics["source"], "letra_match": lyrics["match"],
         "acordes": chords, "acordes_crudos": raw_chords, "pulsos": beats,
+        "extensiones": {"por_acorde": ext_sum,
+                        "por_ocurrencia_baja_confianza": ext_occ},
         "lineas": [{"texto": l["text"], "inicio": round(l["start"], 2), "fin": round(l.get("end") or 0, 2),
                     "palabras": [{"t": w["text"], "inicio": round(w["start"], 2)} for w in l["words"]]}
                    for l in lines],

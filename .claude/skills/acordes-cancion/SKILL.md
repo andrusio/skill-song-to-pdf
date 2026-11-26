@@ -84,10 +84,29 @@ por orden de impacto:
    paso que cierra un ciclo va al final de la línea donde suena. Cada acorde cae sobre la palabra donde
    cambia. Si al corregir un acorde cambia su longitud, mantén las columnas
    (el formato es monoespaciado: los espacios importan).
+7. **Extensiones (7, maj7, 6, sus4, sus2, add9, m7).** El detector de acordes
+   solo da mayor/menor; aparte, el script mide en el audio qué notas extra
+   suenan sobre cada acorde. Cuando una se repite en la mayoría de las
+   apariciones de un acorde, la deja como sugerencia en la cabecera del txt:
+   `// G -> G7  (en 5 de 6 apariciones)`. **No están aplicadas**: decide tú.
+   - Lo esperable: en pop/rock de tríadas no aparece ninguna, o una; en bossa,
+     jazz, soul o baladas aparecen varias y suelen ser correctas.
+   - Aplícala en todas las apariciones de ese acorde si tiene sentido armónico
+     (p. ej. V7 que resuelve a la tónica, m7 en un ii–V, maj7 en I o IV).
+   - Desconfía si choca con el estilo o si contradice otra corrección tuya.
+     Ojo con las ambigüedades de mismas notas: `C6` = `Am7`, `Em7` ≈ `G6`; si
+     sugiere C6 sobre un acorde que tú ya cambiaste a Am, confirma el Am.
+   - `add9` sobre un acorde mayor en bossa/jazz suele ser en realidad `maj7`,
+     `6` o `6/9`; si no lo tienes claro, deja la tríada.
+   - En `datos.json` → `extensiones.por_ocurrencia_baja_confianza` hay además
+     detecciones sueltas: casi siempre son la melodía o la voz, no el acorde.
+     No las uses salvo para confirmar algo que ya sospechas.
+   Al terminar, **borra el bloque de comentarios de extensiones** y, en el
+   resumen al usuario, menciona las que aplicaste y las que descartaste.
 
 Lo que **no** hay que hacer:
-- No inventes extensiones (7, maj7, sus4, add9…): el detector solo distingue
-  mayor/menor. Añádelas solo si el usuario las pide o te da la armonía.
+- No inventes extensiones que no sugiera el script ni pida el usuario: si
+  dudas, la tríada simple nunca está mal para tocar la canción.
 - No reescribas la letra salvo errores evidentes de transcripción de Whisper.
 - No copies la letra en el chat: entrégala dentro del PDF.
 

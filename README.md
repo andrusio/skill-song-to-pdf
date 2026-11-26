@@ -12,7 +12,7 @@ El skill está en [`.claude/skills/acordes-cancion/`](.claude/skills/acordes-can
 1. **Audio**: `yt-dlp` baja el audio de YouTube (o se usa el archivo que mandes).
 2. **Letra**: se busca la letra sincronizada en [LRCLIB](https://lrclib.net); si no está, se transcribe con Whisper.
 3. **Tiempos por palabra**: Whisper ubica cada palabra en el tiempo y se cruza con la letra.
-4. **Acordes y pulso**: [madmom](https://github.com/CPJKU/madmom) detecta acordes (mayor/menor), tempo y tono.
+4. **Acordes y pulso**: [madmom](https://github.com/CPJKU/madmom) detecta acordes (mayor/menor), tempo y tono. Aparte, un análisis del cromagrama sugiere extensiones (7, maj7, 6, sus4, sus2, add9, m7) que el agente valida.
 5. **Hoja**: cada acorde se escribe encima de la palabra donde cambia → `cancion.txt` editable.
 6. **Revisión**: el agente corrige como músico (tono, acordes sueltos mal detectados, secciones).
 7. **PDF**: `render_pdf.py`, con opción de transponer o poner cejilla.
@@ -46,6 +46,6 @@ uv run .claude/skills/acordes-cancion/scripts/render_pdf.py "~/Canciones/<Artist
 
 ## Límites
 
-- El detector solo distingue acordes mayores y menores (sin 7ª, sus, etc.).
+- El detector distingue acordes mayores y menores; las extensiones (7ª, sus, etc.) son sugerencias que hay que validar.
 - Acierta bien en pop/rock; en jazz o armonía compleja, menos.
 - En CPU tarda 1–3 minutos por canción. Con GPU NVIDIA y CUDA instalado, Whisper la usa sola.
